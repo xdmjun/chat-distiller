@@ -13,7 +13,7 @@ def parse_dialogue(content: str, source_type: str = "agent") -> List[Tuple[str, 
 
     参数:
         content: 原始对话内容
-        source_type: 输入类型 ("agent" / "chatgpt_json" / "claude_jsonl" / "generic" / "plain")
+        source_type: 输入类型 ("agent" / "chatgpt_json" / "claude_jsonl" / "generic" / "plain" / "mimo_session")
 
     返回:
         [(role, text), ...] 对话轮次列表
@@ -24,6 +24,7 @@ def parse_dialogue(content: str, source_type: str = "agent") -> List[Tuple[str, 
         "claude_jsonl": _parse_claude_jsonl,
         "generic": _parse_generic,
         "plain": _parse_plain_text,
+        "mimo_session": _parse_mimo_session,
     }
     parser = parsers.get(source_type, _parse_agent_md)
     return parser(content)
@@ -150,14 +151,81 @@ def _parse_plain_text(content: str) -> List[Tuple[str, str]]:
     return blocks
 
 
+def _parse_mimo_session(content: str) -> List[Tuple[str, str]]:
+    """
+    解析 MIMO Agent 会话 JSON 格式
+
+    结构:
+    {
+      "info": { "title": "会话标题", ... },
+      "messages": [
+        {
+          "info": { "role": "user" },
+          "parts": [ {"type": "text", "text": "用户消息"} ]
+        },
+        {
+          "info": { "role": "assistant" },
+          "parts": [
+            {"type": "reasoning", "text": "思考过程"},
+            {"type": "tool", ...},
+            {"type": "text", "text": "最终回答"}
+          ]
+        }
+      ]
+    }
+    """
+    import json
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(data, dict) or 'messages' not in data:
+        return []
+
+    blocks = []
+    for msg in data.get('messages', []):
+        msg_info = msg.get('info', {})
+        role = msg_info.get('role', '')
+        parts = msg.get('parts', [])
+
+        if role == 'user':
+            # 提取用户文本
+            texts = []
+            for p in parts:
+                if isinstance(p, dict) and p.get('type') == 'text':
+                    t = (p.get('text', '') or '').strip()
+                    if t:
+                        texts.append(t)
+            full_text = '\n\n'.join(texts)
+            if full_text:
+                blocks.append(('User', full_text))
+
+        elif role == 'assistant':
+            # 提取 assistant 的 reasoning + 最终文本
+            texts = []
+            for p in parts:
+                if isinstance(p, dict) and p.get('type') in ('reasoning', 'text'):
+                    t = (p.get('text', '') or '').strip()
+                    if t:
+                        texts.append(t)
+            full_text = '\n\n'.join(texts)
+            if full_text:
+                blocks.append(('Assistant', full_text))
+
+    return blocks
+
+
 def detect_source_type(filepath: Path) -> str:
     """自动检测输入文件类型"""
     import json
     suffix = filepath.suffix.lower()
     if suffix == '.json':
-        # 尝试解析为 ChatGPT export
+        # 先尝试解析为 MIMO session 格式
         try:
             data = json.loads(filepath.read_text(encoding='utf-8', errors='ignore'))
+            if isinstance(data, dict) and 'info' in data and 'messages' in data:
+                return "mimo_session"
             if isinstance(data, list) and len(data) > 0:
                 if 'conversations' in data[0] or 'mapping' in data[0]:
                     return "chatgpt_json"

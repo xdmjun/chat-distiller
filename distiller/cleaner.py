@@ -7,7 +7,7 @@ import re
 from typing import List
 
 
-def clean_content(content: str, config: dict) -> str:
+def clean_content(content: str, config: dict, source_type: str = "agent") -> str:
     """
     清洗对话内容主入口
     1. 解析对话轮次
@@ -16,7 +16,7 @@ def clean_content(content: str, config: dict) -> str:
     4. 合并结果
     """
     from .adapter import parse_dialogue
-    blocks = parse_dialogue(content)
+    blocks = parse_dialogue(content, source_type=source_type)
 
     if not blocks:
         return content.strip()

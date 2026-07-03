@@ -158,7 +158,7 @@ def main(source, output, config, ob_wiki, wiki_path, dry_run, force, min_score, 
 
         # 6e. 清洗
         try:
-            cleaned = clean_content(raw_content, cfg)
+            cleaned = clean_content(raw_content, cfg, source_type=source_type)
         except Exception as e:
             click.echo(f"  ⚠️  清洗失败: {rel_path} — {e}")
             stats['error'] += 1
