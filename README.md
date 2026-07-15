@@ -61,4 +61,4 @@ chat-distiller/
 
 ## License
 
-AGPL-3.0
+MIT — 见 [LICENSE](./LICENSE)。
