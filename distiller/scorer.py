@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-6 维评分引擎：信息密度、技术深度、白名单匹配、关键词、长度惩罚、套话惩罚
-输出 0-15 分 + category 分类
+7 维评分引擎：信息密度、技术深度、结构化数据、白名单匹配、关键词、长度惩罚、套话惩罚
+输出 0-18 分 + category 分类
 """
 
 import re
@@ -9,15 +9,16 @@ import re
 
 def score_6dim(filepath, cleaned_content: str, config: dict) -> dict:
     """
-    6 维度评分，总分 0-15
+    7 维度评分，总分 0-18
 
     维度:
     1. 信息密度 (0-2): 文件大小 / 内容量
     2. 技术深度 (0-3): 代码块 + 标题结构
-    3. 白名单匹配 (0-5): 领域规则命中
-    4. 标题关键词 (0-3): 高价值关键词命中标题
-    5. 内容关键词 (0-2): 高价值关键词命中内容
-    6. 惩罚项 (-2~0): 低价值关键词 / 套话残留惩罚
+    3. 结构化数据 (0-3): 表格、IP地址、架构图、键值对等结构化内容
+    4. 白名单匹配 (0-5): 领域规则命中
+    5. 标题关键词 (0-3): 高价值关键词命中标题
+    6. 内容关键词 (0-2): 高价值关键词命中内容
+    7. 惩罚项 (-2~0): 低价值关键词 / 套话残留惩罚
     """
     name = filepath.stem if hasattr(filepath, 'stem') else str(filepath)
     score = 0.0
@@ -51,6 +52,36 @@ def score_6dim(filepath, cleaned_content: str, config: dict) -> dict:
     elif headings >= 2:
         score += 0.5
         reasons.append(f'some_headings({headings})')
+
+    # D3: 结构化数据 (0-3) — 新增维度，识别表格、IP、架构图、键值对
+    struct_score = 0
+
+    # 3a: Markdown 表格行
+    table_rows = len(re.findall(r'^\|.+\|$', cleaned_content, re.MULTILINE))
+    if table_rows >= 8:
+        struct_score += 1.5
+        reasons.append(f'tables({table_rows})')
+    elif table_rows >= 3:
+        struct_score += 1
+        reasons.append(f'some_tables({table_rows})')
+
+    # 3b: IP 地址 + 端口组合
+    ip_ports = len(re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', cleaned_content))
+    if ip_ports >= 5:
+        struct_score += 1
+        reasons.append(f'ip_data({ip_ports})')
+    elif ip_ports >= 2:
+        struct_score += 0.5
+        reasons.append(f'some_ip({ip_ports})')
+
+    # 3c: ASCII 架构图/流程图
+    ascii_diagrams = len(re.findall(r'[┌└├│┐┘┤─→↓←↑↔↕]', cleaned_content))
+    if ascii_diagrams >= 5:
+        struct_score += 0.5
+        reasons.append(f'diagram({ascii_diagrams})')
+
+    struct_bonus = min(struct_score, 3)
+    score += struct_bonus
 
     # D3: 白名单匹配 (0-5)
     whitelist_score = 0
