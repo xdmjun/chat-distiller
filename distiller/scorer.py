@@ -6,6 +6,25 @@
 
 import re
 
+# ASCII 示意图特征字符（制表符/箭头）
+_DIAGRAM_CHARS = set('─━│┃┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬┏┓┗┛▼▲◀▶→←↑↓↔↕╭╮╯╰')
+
+
+def count_real_code_blocks(content: str) -> int:
+    """统计围栏代码块数量，排除 ASCII 示意图（制表符/箭头为主的块）"""
+    blocks = re.findall(r'```[^\n]*\n(.*?)```', content, re.DOTALL)
+    count = 0
+    for body in blocks:
+        lines = [ln for ln in body.splitlines() if ln.strip()]
+        if not lines:
+            continue
+        diagram_lines = sum(1 for ln in lines if any(ch in _DIAGRAM_CHARS for ch in ln))
+        ratio = diagram_lines / len(lines)
+        if ratio > 0.3 or (diagram_lines >= 2 and ratio >= 0.15):
+            continue  # ASCII 示意图，不计入技术深度
+        count += 1
+    return count
+
 
 def score_6dim(filepath, cleaned_content: str, config: dict) -> dict:
     """
@@ -37,7 +56,7 @@ def score_6dim(filepath, cleaned_content: str, config: dict) -> dict:
         reasons.append(f'info_light(>{file_size//1024}KB)')
 
     # D2: 技术深度 (0-3)
-    code_blocks = cleaned_content.count('```') // 2
+    code_blocks = count_real_code_blocks(cleaned_content)
     if code_blocks >= 5:
         score += 2
         reasons.append(f'deep_code({code_blocks})')
